@@ -9,24 +9,8 @@
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-2 sm:p-4">
     <div id="app"></div>
 
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc, orderBy } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyCv0Yom3XNZ5lYytJuI62hOYn1HC4kgzxQ",
-            authDomain: "workout-tracker-b56d1.firebaseapp.com",
-            projectId: "workout-tracker-b56d1",
-            storageBucket: "workout-tracker-b56d1.firebasestorage.app",
-            messagingSenderId: "169629117227",
-            appId: "1:169629117227:web:cdc112641c9242eb73336e"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
+    <script>
         let state = {
-            username: localStorage.getItem('username') || '',
             workouts: [],
             currentWorkout: null,
             activeExercises: [],
@@ -35,76 +19,15 @@
             workoutNotes: ''
         };
 
-        async function loadWorkouts() {
-            if (!state.username) return;
-            
-            try {
-                const q = query(
-                    collection(db, 'workouts'),
-                    where('username', '==', state.username),
-                    orderBy('date', 'desc')
-                );
-                const querySnapshot = await getDocs(q);
-                state.workouts = [];
-                querySnapshot.forEach((doc) => {
-                    state.workouts.push({ id: doc.id, ...doc.data() });
-                });
-                render();
-            } catch (error) {
-                console.error('Error loading workouts:', error);
+        function loadWorkouts() {
+            const saved = localStorage.getItem('workouts');
+            if (saved) {
+                state.workouts = JSON.parse(saved);
             }
         }
 
-        async function saveWorkout() {
-            const workout = {
-                username: state.username,
-                ...state.currentWorkout,
-                exercises: state.activeExercises,
-                notes: state.workoutNotes,
-                completedAt: new Date().toISOString()
-            };
-            
-            try {
-                await addDoc(collection(db, 'workouts'), workout);
-                await loadWorkouts();
-                state.showLogger = false;
-                state.currentWorkout = null;
-                state.activeExercises = [];
-                state.workoutNotes = '';
-                render();
-            } catch (error) {
-                console.error('Error saving workout:', error);
-                alert('Failed to save workout. Please try again.');
-            }
-        }
-
-        async function deleteWorkout(id) {
-            if (confirm('Delete this workout?')) {
-                try {
-                    await deleteDoc(doc(db, 'workouts', id));
-                    await loadWorkouts();
-                } catch (error) {
-                    console.error('Error deleting workout:', error);
-                    alert('Failed to delete workout.');
-                }
-            }
-        }
-
-        function setUsername() {
-            const input = document.getElementById('usernameInput');
-            const username = input.value.trim();
-            if (username) {
-                state.username = username;
-                localStorage.setItem('username', username);
-                loadWorkouts();
-            }
-        }
-
-        function logout() {
-            state.username = '';
-            state.workouts = [];
-            localStorage.removeItem('username');
-            render();
+        function saveWorkouts() {
+            localStorage.setItem('workouts', JSON.stringify(state.workouts));
         }
 
         const workoutTemplates = {
@@ -162,11 +85,36 @@
             render();
         }
 
+        function saveWorkout() {
+            const workout = {
+                ...state.currentWorkout,
+                exercises: state.activeExercises,
+                notes: state.workoutNotes,
+                completedAt: new Date().toISOString(),
+                id: Date.now()
+            };
+            state.workouts.unshift(workout);
+            saveWorkouts();
+            state.showLogger = false;
+            state.currentWorkout = null;
+            state.activeExercises = [];
+            state.workoutNotes = '';
+            render();
+        }
+
         function cancelWorkout() {
             state.showLogger = false;
             state.currentWorkout = null;
             state.activeExercises = [];
             render();
+        }
+
+        function deleteWorkout(id) {
+            if (confirm('Delete this workout?')) {
+                state.workouts = state.workouts.filter(w => w.id !== id);
+                saveWorkouts();
+                render();
+            }
         }
 
         function exportCSV() {
@@ -241,21 +189,6 @@
 
         function render() {
             const app = document.getElementById('app');
-
-            if (!state.username) {
-                app.innerHTML = `
-                    <div class="max-w-md mx-auto mt-20">
-                        <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-center">
-                            <h1 class="text-4xl font-bold text-white mb-6">💪 Workout Tracker</h1>
-                            <p class="text-purple-200 mb-6">Enter your username to get started</p>
-                            <input type="text" id="usernameInput" placeholder="Your username" class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white text-center mb-4 focus:outline-none focus:border-purple-400">
-                            <button onclick="window.setUsername()" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 rounded-xl">Start Tracking</button>
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-
             const stats = getStats();
 
             if (state.showLogger) {
@@ -267,20 +200,20 @@
                                     <h2 class="text-xl sm:text-2xl font-bold text-white">${state.currentWorkout.name}</h2>
                                     <p class="text-sm text-purple-200">${state.currentWorkout.date}</p>
                                 </div>
-                                <button onclick="window.cancelWorkout()" class="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-red-200 text-2xl">✕</button>
+                                <button onclick="cancelWorkout()" class="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-red-200 text-2xl">✕</button>
                             </div>
                         </div>
 
                         <div class="space-y-3" id="exercises"></div>
 
-                        <button onclick="window.addExercise()" class="w-full mt-3 bg-white/10 hover:bg-white/20 border border-dashed border-white/30 rounded-xl p-3 text-white text-sm">+ Add Exercise</button>
+                        <button onclick="addExercise()" class="w-full mt-3 bg-white/10 hover:bg-white/20 border border-dashed border-white/30 rounded-xl p-3 text-white text-sm">+ Add Exercise</button>
 
                         <div class="bg-white/10 rounded-xl p-4 mt-3">
                             <label class="text-white font-semibold mb-2 block text-sm">📝 Workout Notes</label>
                             <textarea id="notes" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm min-h-20" placeholder="How did you feel?">${state.workoutNotes}</textarea>
                         </div>
 
-                        <button onclick="window.saveWorkout()" class="w-full mt-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 rounded-xl text-sm sm:text-base">Complete Workout</button>
+                        <button onclick="saveWorkout()" class="w-full mt-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold py-3 rounded-xl text-sm sm:text-base">Complete Workout</button>
                     </div>
                 `;
 
@@ -288,19 +221,19 @@
                 exercisesDiv.innerHTML = state.activeExercises.map((ex, exIdx) => `
                     <div class="bg-white/10 rounded-xl p-3">
                         <div class="flex justify-between items-center mb-2">
-                            <input type="text" value="${ex.name}" onchange="window.updateExerciseName(${exIdx}, this.value)" class="text-base font-semibold text-white bg-transparent border-b border-transparent hover:border-white/30 focus:border-purple-400 focus:outline-none flex-1">
+                            <input type="text" value="${ex.name}" onchange="updateExerciseName(${exIdx}, this.value)" class="text-base font-semibold text-white bg-transparent border-b border-transparent hover:border-white/30 focus:border-purple-400 focus:outline-none flex-1">
                             <span class="text-xs bg-purple-500/20 text-purple-200 px-2 py-1 rounded-full ml-2">${ex.type}</span>
-                            <button onclick="window.removeExercise(${exIdx})" class="ml-2 text-red-200 text-lg">🗑️</button>
+                            <button onclick="removeExercise(${exIdx})" class="ml-2 text-red-200 text-lg">🗑️</button>
                         </div>
                         <p class="text-purple-200 text-xs mb-2">Target: ${ex.sets} sets × ${ex.reps} reps</p>
                         ${ex.completedSets.map((set, setIdx) => `
                             <div class="flex gap-2 items-center mb-2">
                                 <span class="text-white text-xs w-12">Set ${setIdx + 1}</span>
                                 ${ex.type !== 'mobility' ? `
-                                    <input type="number" placeholder="Weight" value="${set.weight}" onchange="window.updateSet(${exIdx}, ${setIdx}, 'weight', this.value)" class="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-sm">
-                                    <input type="number" placeholder="Reps" value="${set.reps}" onchange="window.updateSet(${exIdx}, ${setIdx}, 'reps', this.value)" class="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-sm">
+                                    <input type="number" placeholder="Weight" value="${set.weight}" onchange="updateSet(${exIdx}, ${setIdx}, 'weight', this.value)" class="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-sm">
+                                    <input type="number" placeholder="Reps" value="${set.reps}" onchange="updateSet(${exIdx}, ${setIdx}, 'reps', this.value)" class="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-sm">
                                 ` : '<span class="flex-1 text-purple-200 text-xs">Completed</span>'}
-                                <button onclick="window.toggleComplete(${exIdx}, ${setIdx})" class="px-3 py-1 rounded text-sm ${set.completed ? 'bg-green-500 text-white' : 'bg-white/10 text-white/50'}">✓</button>
+                                <button onclick="toggleComplete(${exIdx}, ${setIdx})" class="px-3 py-1 rounded text-sm ${set.completed ? 'bg-green-500 text-white' : 'bg-white/10 text-white/50'}">✓</button>
                             </div>
                         `).join('')}
                     </div>
@@ -313,12 +246,9 @@
             } else {
                 app.innerHTML = `
                     <div class="max-w-6xl mx-auto">
-                        <div class="flex justify-between items-center mb-6">
-                            <div class="text-center flex-1">
-                                <h1 class="text-3xl sm:text-4xl font-bold text-white mb-2">💪 Workout Tracker</h1>
-                                <p class="text-sm text-purple-200">Welcome back, ${state.username}!</p>
-                            </div>
-                            <button onclick="window.logout()" class="bg-red-500/20 hover:bg-red-500/30 text-red-200 px-4 py-2 rounded-lg text-sm">Logout</button>
+                        <div class="text-center mb-6">
+                            <h1 class="text-3xl sm:text-4xl font-bold text-white mb-2">💪 Workout Tracker</h1>
+                            <p class="text-sm text-purple-200">Strength + Mobility Training</p>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
@@ -344,7 +274,7 @@
                             <input type="date" value="${state.selectedDate}" onchange="state.selectedDate = this.value" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white mb-3 text-sm">
                             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
                                 ${Object.keys(workoutTemplates).map(key => `
-                                    <button onclick="window.startWorkout('${key}')" class="bg-gradient-to-br from-purple-500/30 to-pink-500/30 hover:from-purple-500/50 hover:to-pink-500/50 border border-white/20 rounded-xl p-4 text-left">
+                                    <button onclick="startWorkout('${key}')" class="bg-gradient-to-br from-purple-500/30 to-pink-500/30 hover:from-purple-500/50 hover:to-pink-500/50 border border-white/20 rounded-xl p-4 text-left">
                                         <h3 class="text-base font-bold text-white">Workout ${key}</h3>
                                         <p class="text-purple-200 text-xs">${workoutTemplates[key].exercises.length} exercises</p>
                                     </button>
@@ -354,7 +284,7 @@
 
                         ${state.workouts.length > 0 ? `
                             <div class="flex justify-end mb-4">
-                                <button onclick="window.exportCSV()" class="bg-gradient-to-r from-green-500/30 to-teal-500/30 border border-white/20 text-white font-semibold px-4 py-2 rounded-xl text-sm">📥 Export CSV</button>
+                                <button onclick="exportCSV()" class="bg-gradient-to-r from-green-500/30 to-teal-500/30 border border-white/20 text-white font-semibold px-4 py-2 rounded-xl text-sm">📥 Export CSV</button>
                             </div>
                         ` : ''}
 
@@ -368,7 +298,7 @@
                                                 <h3 class="text-white font-semibold text-sm">${w.name}</h3>
                                                 <p class="text-purple-200 text-xs">${w.date} • ${w.exercises.length} exercises</p>
                                             </div>
-                                            <button onclick="window.deleteWorkout('${w.id}')" class="p-2 bg-red-500/20 hover:bg-red-500/30 rounded text-red-200">🗑️</button>
+                                            <button onclick="deleteWorkout(${w.id})" class="p-2 bg-red-500/20 hover:bg-red-500/30 rounded text-red-200">🗑️</button>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -379,24 +309,8 @@
             }
         }
 
-        window.setUsername = setUsername;
-        window.logout = logout;
-        window.startWorkout = startWorkout;
-        window.saveWorkout = saveWorkout;
-        window.cancelWorkout = cancelWorkout;
-        window.deleteWorkout = deleteWorkout;
-        window.exportCSV = exportCSV;
-        window.updateSet = updateSet;
-        window.toggleComplete = toggleComplete;
-        window.updateExerciseName = updateExerciseName;
-        window.removeExercise = removeExercise;
-        window.addExercise = addExercise;
-
-        if (state.username) {
-            loadWorkouts();
-        } else {
-            render();
-        }
+        loadWorkouts();
+        render();
     </script>
 </body>
 </html>
